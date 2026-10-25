@@ -13,7 +13,10 @@ export const onRequest = defineMiddleware(async (context, next) => {
     !['GET', 'HEAD', 'OPTIONS'].includes(context.request.method) &&
     !bearer
   ) {
-    if (context.request.headers.get('origin') !== context.url.origin) {
+    const expectedOrigin =
+      process.env.APP_ORIGIN ||
+      `${context.url.protocol}//${context.request.headers.get('host') || context.url.host}`;
+    if (context.request.headers.get('origin') !== expectedOrigin) {
       return Response.json(
         { error: 'Origen de solicitud no permitido.' },
         { status: 403 },

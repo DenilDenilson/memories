@@ -1,5 +1,6 @@
 import { describe, it, expect, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import sharp from 'sharp';
 import { eq } from 'drizzle-orm';
 import { db, sqlite } from '../src/lib/db';
@@ -130,6 +131,23 @@ describe('códigos y sesiones', () => {
   });
 });
 describe('imágenes y almacenamiento privado', () => {
+  it('convierte HEIC real a JPEG y mantiene el archivo HEIC original intacto', async () => {
+    const bytes = await readFile(
+      new URL('./fixtures/sample.heic', import.meta.url),
+    );
+    const photo = await processPhoto(
+      new File([new Uint8Array(bytes)], 'iphone.HEIC', { type: 'image/heic' }),
+      ids.private,
+    );
+    expect(photo.mime).toBe('image/heic');
+    expect(await getFile(`${photo.id}/original`)).toEqual(bytes);
+    const metadata = await sharp(
+      await getFile(`${photo.id}/preview`),
+    ).metadata();
+    expect(metadata.format).toBe('jpeg');
+    expect(metadata.width).toBe(64);
+    await deletePhotoFiles(photo.id);
+  });
   it('conserva el original exacto, crea variantes sin EXIF y oculta la descarga al visitante', async () => {
     const original = await sharp({
       create: { width: 800, height: 600, channels: 3, background: '#78916a' },

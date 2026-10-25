@@ -237,14 +237,27 @@ export const ALL: APIRoute = async (context) => {
       }
       if ((method === 'POST' && !id) || (method === 'PUT' && id)) {
         if (id && !getMemory(id, access)) fail(404, 'Recuerdo no encontrado.');
+        if (
+          !request.headers
+            .get('content-type')
+            ?.startsWith('multipart/form-data;')
+        ) {
+          fail(
+            400,
+            'Usa multipart/form-data con los campos metadata y photos.',
+          );
+        }
         const body = await limitedBody(request, 100 * 1024 * 1024);
-        const form = await new Request(url, {
-          method: 'POST',
-          headers: {
-            'content-type': request.headers.get('content-type') || '',
-          },
-          body: new Uint8Array(body),
-        }).formData();
+        let form: FormData;
+        try {
+          form = await new Request(url, {
+            method: 'POST',
+            headers: { 'content-type': request.headers.get('content-type')! },
+            body: new Uint8Array(body),
+          }).formData();
+        } catch {
+          return fail(400, 'Formulario multipart inválido.');
+        }
         let raw;
         try {
           raw = JSON.parse(String(form.get('metadata')));
