@@ -1,0 +1,150 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Icon from '../components/Icon.astro';
+import { monthData, today } from '../lib/calendar';
+import { listMemories } from '../lib/memories';
+const calendar = monthData(Astro.url.searchParams.get('mes'));
+const access = Astro.locals.access;
+const items = listMemories(access, calendar.from, calendar.to);
+const photoCount = items.reduce((sum, m) => sum + m.photos.length, 0);
+const dayCount = new Set(items.map((m) => m.date)).size;
+---
+
+<Layout>
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">LA VIDA ESTÁ EN LOS PEQUEÑOS MOMENTOS</p><h1>
+        Días para recordar<span class="text-sage">.</span>
+      </h1><p class="lead">Un lugar para volver a lo que te hizo sonreír.</p>
+    </div>
+    {
+      access.role === 'admin' ? (
+        <a class="button primary" href="/admin/recuerdo">
+          <Icon name="plus" size={16} /> Nuevo recuerdo
+        </a>
+      ) : (
+        <a class="button" href="/acceso">
+          <Icon name="lock" size={15} /> Tengo un código
+        </a>
+      )
+    }
+  </header>
+  <section aria-label="Calendario de recuerdos">
+    <div class="calendar-toolbar">
+      <div class="month-nav">
+        <h2>{calendar.label}</h2><div class="nav-arrows">
+          <a
+            class="icon-button"
+            href={`/?mes=${calendar.previous}`}
+            aria-label="Mes anterior"><Icon name="left" size={16} /></a
+          ><a
+            class="icon-button"
+            href={`/?mes=${calendar.next}`}
+            aria-label="Mes siguiente"><Icon name="right" size={16} /></a
+          >
+        </div><a class="today-link" href="/">Hoy</a>
+      </div>
+      <input
+        class="month-input"
+        type="month"
+        aria-label="Ir a un mes"
+        value={calendar.month}
+        id="month-picker"
+      />
+    </div>
+    <div class="calendar">
+      <div class="weekdays" aria-hidden="true">
+        {
+          ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM'].map((day) => (
+            <span>{day}</span>
+          ))
+        }
+      </div>
+      <div class="calendar-grid">
+        {
+          calendar.cells.map((date) => {
+            if (!date) return <div class="day outside" aria-hidden="true" />;
+            const entries = items.filter((item) => item.date === date);
+            const photos = entries.flatMap((item) => item.photos);
+            return (
+              <a
+                class:list={['day', { 'is-today': date === today() }]}
+                href={`/dia/${date}`}
+                aria-label={`${date}: ${entries.length} recuerdos, ${photos.length} fotos`}
+              >
+                <span class="day-number">{Number(date.slice(-2))}</span>
+                {photos.length ? (
+                  <>
+                    <div class="day-preview">
+                      <img src={photos[0].thumbnailUrl} alt="" loading="lazy" />
+                      <span class="photo-count">
+                        <Icon name="image" size={10} />
+                        {photos.length}
+                      </span>
+                    </div>
+                    <span class="day-title">
+                      {entries[0].title}
+                      {entries.length > 1 ? ` +${entries.length - 1}` : ''}
+                    </span>
+                  </>
+                ) : (
+                  access.role === 'admin' && (
+                    <span class="day-add">
+                      <Icon name="plus" size={16} />
+                    </span>
+                  )
+                )}
+              </a>
+            );
+          })
+        }
+      </div>
+    </div>
+    <div class="calendar-footer">
+      <div class="legend">
+        <span class="legend-dot"></span>{dayCount}
+        {dayCount === 1 ? 'día' : 'días'} con recuerdos · {photoCount} fotos
+      </div><span
+        >{
+          access.role === 'admin'
+            ? 'Solo tú puedes ver todos los recuerdos'
+            : 'Ves los recuerdos compartidos contigo'
+        }</span
+      >
+    </div>
+  </section>
+  <aside class="month-note">
+    <Icon name="image" size={27} /><div>
+      <p>
+        {
+          items.length
+            ? 'Cada foto, una pequeña historia.'
+            : 'Todo empieza con un día cualquiera.'
+        }
+      </p><small
+        >{
+          items.length
+            ? 'Toca un día y vuelve a vivirlo, sin prisa.'
+            : access.role === 'admin'
+              ? 'Añade tu primer recuerdo y dale vida a tu calendario.'
+              : 'Los recuerdos públicos aparecerán aquí. ¿Tienes un código? Descubre más.'
+        }</small
+      >
+    </div><a href={access.role === 'admin' ? '/admin/recuerdo' : '/acceso'}
+      >{access.role === 'admin' ? 'Guardar un momento →' : 'Entrar →'}</a
+    >
+  </aside>
+  <footer class="page-footer">
+    <span>HECHO DE MOMENTOS, NO DE COSAS.</span><span
+      >denil-memories © {new Date().getFullYear()}</span
+    >
+  </footer>
+  <script>
+    document
+      .querySelector('#month-picker')
+      ?.addEventListener('change', (event) => {
+        const value = (event.target as HTMLInputElement).value;
+        if (value) window.location.assign(`/?mes=${value}`);
+      });
+  </script>
+</Layout>

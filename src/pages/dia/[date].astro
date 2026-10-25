@@ -1,0 +1,50 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Icon from '../../components/Icon.astro';
+import MemoryCard from '../../components/MemoryCard.astro';
+import { dateSchema, listMemories } from '../../lib/memories';
+import { dateLabel } from '../../lib/calendar';
+const parsed = dateSchema.safeParse(Astro.params.date);
+if (!parsed.success) return Astro.redirect('/404');
+const date = parsed.data;
+const items = listMemories(Astro.locals.access, date, date);
+---
+
+<Layout title={dateLabel(date)}>
+  <a class="back-link" href={`/?mes=${date.slice(0, 7)}`}
+    ><Icon name="arrow" size={15} /> Volver al calendario</a
+  >
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">UN DÍA, MUCHAS HISTORIAS</p><h1 class="capitalize">
+        {dateLabel(date, { day: 'numeric', month: 'long' })}
+      </h1><p class="lead">
+        {dateLabel(date, { weekday: 'long', year: 'numeric' })} · {items.length} recuerdos
+      </p>
+    </div>{
+      Astro.locals.access.role === 'admin' && (
+        <a class="button primary" href={`/admin/recuerdo?fecha=${date}`}>
+          <Icon name="plus" size={16} /> Añadir recuerdo
+        </a>
+      )
+    }
+  </header>
+  {
+    items.length ? (
+      <div class="card-grid">
+        {items.map((memory) => (
+          <MemoryCard memory={memory} />
+        ))}
+      </div>
+    ) : (
+      <div class="empty">
+        <p>No hay recuerdos disponibles para esta fecha.</p>
+        {Astro.locals.access.role === 'admin' && (
+          <a class="button primary" href={`/admin/recuerdo?fecha=${date}`}>
+            Guardar un recuerdo
+          </a>
+        )}
+      </div>
+    )
+  }
+</Layout>

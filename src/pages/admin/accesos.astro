@@ -1,0 +1,152 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Icon from '../../components/Icon.astro';
+import { db } from '../../lib/db';
+import { groups, sessions } from '../../lib/schema';
+import { eq } from 'drizzle-orm';
+if (Astro.locals.access.role !== 'admin')
+  return Astro.redirect('/acceso?modo=admin');
+const allGroups = db
+  .select({ id: groups.id, name: groups.name })
+  .from(groups)
+  .all();
+const tokens = db
+  .select({
+    id: sessions.hash,
+    label: sessions.label,
+    expiresAt: sessions.expiresAt,
+  })
+  .from(sessions)
+  .where(eq(sessions.kind, 'token'))
+  .all();
+---
+
+<Layout title="Accesos y API" section="access">
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">CADA RECUERDO, CON SU GENTE</p><h1>
+        Compartir con intención.
+      </h1><p class="lead">
+        Tú decides quién puede ver cada parte de tu historia.
+      </p>
+    </div>
+  </header>
+  <div class="max-w-3xl">
+    <p class="error" id="settings-error" role="alert" hidden></p><div
+      class="success"
+      id="secret-result"
+      role="status"
+      hidden
+    >
+      <p id="secret-label"></p><code id="secret-value"></code><p
+        class="hint mt-3"
+      >
+        Guárdalo ahora: no volveremos a mostrarlo.
+      </p><button class="button small mt-3" id="copy-secret">Copiar</button
+      ><button class="button small mt-3" id="dismiss-secret"
+        >Listo, continuar</button
+      >
+    </div>
+    <section class="panel">
+      <h2>Grupos y códigos</h2><p class="hint">
+        Un código por grupo. Los grupos son independientes y puedes combinar
+        varios en cada recuerdo. Todos ven también lo público.
+      </p>
+      <form id="group-form" class="inline-form">
+        <div class="field">
+          <label for="group-name">Nombre del grupo</label><input
+            id="group-name"
+            name="name"
+            placeholder="Amigos, familia, pareja…"
+            required
+            maxlength="40"
+          />
+        </div><button class="button primary" type="submit"
+          ><Icon name="plus" size={15} /> Crear grupo</button
+        >
+      </form>
+      {
+        allGroups.map((group) => (
+          <div class="access-row">
+            <>
+              <div class="flex items-center gap-3">
+                <>
+                  <Icon name="people" size={18} />
+                  <strong>{group.name}</strong>
+                </>
+              </div>
+              <div class="actions">
+                <>
+                  <button class="button small" data-rotate={group.id}>
+                    Cambiar código
+                  </button>
+                  <button
+                    class="button small danger"
+                    data-delete-group={group.id}
+                  >
+                    Eliminar
+                  </button>
+                </>
+              </div>
+            </>
+          </div>
+        ))
+      }
+      {
+        !allGroups.length && (
+          <p class="hint py-4">
+            Crea tu primer grupo para compartir recuerdos privados.
+          </p>
+        )
+      }
+      <p class="hint mt-4">
+        Cambiar un código cierra todos los accesos de ese grupo. Eliminar un
+        grupo retira sus permisos; tus recuerdos se conservan.
+      </p>
+    </section>
+    <section class="panel">
+      <h2>API y automatizaciones</h2><p class="hint">
+        Crea un token para tus scripts o integraciones. Tiene acceso de
+        administrador y caduca a los 90 días. Los originales solo están
+        disponibles para el administrador.
+      </p><form id="token-form" class="inline-form">
+        <div class="field">
+          <label for="token-label">Nombre de la integración</label><input
+            id="token-label"
+            name="label"
+            placeholder="Mi script de fotos"
+            required
+            maxlength="80"
+          />
+        </div><button class="button" type="submit">Crear token</button>
+      </form>
+      {
+        tokens.map((token) => (
+          <div class="access-row">
+            <>
+              <div>
+                <>
+                  <strong>{token.label}</strong>
+                  <p class="hint">
+                    Caduca el{' '}
+                    {new Date(token.expiresAt).toLocaleDateString('es')}
+                  </p>
+                </>
+              </div>
+              <button class="button small danger" data-delete-token={token.id}>
+                Revocar
+              </button>
+            </>
+          </div>
+        ))
+      }
+      <p class="hint mt-4">
+        Base de la API: <code>/api/v1</code>. Autenticación: <code
+          >Authorization: Bearer TU_TOKEN</code
+        >. Consulta <code>docs/API.md</code> en el repositorio para ver todos los
+        endpoints y ejemplos.
+      </p>
+    </section>
+  </div>
+  <script src="../../scripts/settings.ts"></script>
+</Layout>

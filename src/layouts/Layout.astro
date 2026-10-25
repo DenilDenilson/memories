@@ -1,0 +1,136 @@
+---
+import '../styles/global.css';
+import Icon from '../components/Icon.astro';
+interface Props {
+  title?: string;
+  section?: string;
+}
+const { title = 'Tu vida, un día a la vez', section = 'calendar' } =
+  Astro.props;
+const access = Astro.locals.access;
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Un espacio para guardar los días que quieres recordar."
+    />
+    <meta name="theme-color" content="#f8f9f6" />
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title} · denil-memories</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Saltar al contenido</a>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="/" aria-label="denil-memories, inicio"
+          ><span class="brand-mark"><Icon name="grid" size={21} /></span><span
+            >denil<span class="brand-light">memories</span><span
+              class="brand-dot">.</span
+            ></span
+          ></a
+        >
+        <div class="sidebar-caption">UN PEQUEÑO ARCHIVO DE VIDA</div>
+        <nav aria-label="Navegación principal" class="nav-list">
+          <a
+            class:list={['nav-item', { active: section === 'calendar' }]}
+            href="/"><Icon name="calendar" /> <span>Mi calendario</span></a
+          >
+          {
+            access.role === 'admin' && (
+              <>
+                <a
+                  class:list={['nav-item', { active: section === 'admin' }]}
+                  href="/admin"
+                >
+                  <>
+                    <Icon name="image" />
+                    <span>Mis recuerdos</span>
+                  </>
+                </a>
+                <a
+                  class:list={['nav-item', { active: section === 'access' }]}
+                  href="/admin/accesos"
+                >
+                  <>
+                    <Icon name="people" />
+                    <span>Accesos y API</span>
+                  </>
+                </a>
+              </>
+            )
+          }
+        </nav>
+        <div class="sidebar-note">
+          <Icon name="heart" size={22} /><p>
+            Los días pasan.<br />Los recuerdos se quedan.
+          </p><span>Haz espacio para lo que importa.</span>
+        </div>
+        <div class="identity">
+          <span class="avatar"
+            >{
+              access.role === 'admin' ? (
+                'D'
+              ) : access.role === 'group' ? (
+                access.name?.slice(0, 1).toUpperCase()
+              ) : (
+                <Icon name="globe" size={17} />
+              )
+            }</span
+          >
+          <div>
+            <strong
+              >{
+                access.role === 'admin'
+                  ? 'Mi espacio'
+                  : access.role === 'group'
+                    ? access.name
+                    : 'De visita'
+              }</strong
+            ><small
+              >{
+                access.role === 'admin'
+                  ? 'Administrador'
+                  : access.role === 'group'
+                    ? 'Acceso compartido'
+                    : 'Recuerdos públicos'
+              }</small
+            >
+          </div>
+          {
+            access.role === 'public' ? (
+              <a
+                href="/acceso"
+                class="icon-button"
+                aria-label="Introducir código de acceso"
+              >
+                <Icon name="lock" size={17} />
+              </a>
+            ) : (
+              <button
+                class="icon-button"
+                id="logout"
+                aria-label="Cerrar acceso"
+              >
+                <Icon name="logout" size={17} />
+              </button>
+            )
+          }
+        </div>
+      </aside>
+      <main id="main"><slot /></main>
+    </div>
+    <div id="toast" class="toast" role="status" hidden></div>
+    <script>
+      document.querySelector('#logout')?.addEventListener('click', async () => {
+        const response = await fetch('/api/v1/session', { method: 'DELETE' });
+        if (response.ok) window.location.assign('/');
+      });
+    </script>
+  </body>
+</html>

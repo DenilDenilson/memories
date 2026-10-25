@@ -1,0 +1,158 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Icon from '../../components/Icon.astro';
+import { getMemory } from '../../lib/memories';
+import { dateLabel } from '../../lib/calendar';
+const memory = getMemory(Astro.params.id!, Astro.locals.access);
+if (!memory) {
+  Astro.response.status = 404;
+}
+---
+
+<Layout title={memory?.title || 'Recuerdo no encontrado'}>
+  {
+    memory ? (
+      <>
+        <a class="back-link" href={`/dia/${memory.date}`}>
+          <Icon name="arrow" size={15} /> {dateLabel(memory.date)}
+        </a>
+        <header class="page-heading">
+          <div>
+            <>
+              <p class="eyebrow">PEQUEÑOS MOMENTOS, GRANDES RECUERDOS</p>
+              <h1>{memory.title}</h1>
+              <div class="badges">
+                <span class="badge">
+                  <Icon name={memory.public ? 'globe' : 'lock'} size={12} />
+                  {memory.public ? 'Público' : 'Acceso privado'}
+                </span>
+                {memory.tags.map((tag) => (
+                  <span class="badge">#{tag}</span>
+                ))}
+              </div>
+            </>
+          </div>
+          {Astro.locals.access.role === 'admin' && (
+            <a class="button" href={`/admin/recuerdo?id=${memory.id}`}>
+              <Icon name="edit" size={15} /> Editar
+            </a>
+          )}
+        </header>
+        {memory.description && (
+          <p class="detail-description">{memory.description}</p>
+        )}
+        <p class="eyebrow">
+          {memory.photos.length} FOTOS PARA VOLVER A ESTE DÍA
+        </p>
+        <div class="photo-grid">
+          {memory.photos.map((photo, i) => (
+            <figure class="photo-item">
+              <button
+                class="photo-open"
+                data-index={i}
+                data-src={photo.previewUrl}
+                aria-label={`Ampliar foto ${i + 1}`}
+              >
+                <img
+                  src={photo.previewUrl}
+                  alt={`${memory.title}, foto ${i + 1}`}
+                  loading={i > 1 ? 'lazy' : 'eager'}
+                />
+              </button>
+              {photo.originalUrl && (
+                <a
+                  class="download"
+                  href={photo.originalUrl}
+                  aria-label={`Descargar original ${i + 1}`}
+                >
+                  <Icon name="download" size={19} />
+                </a>
+              )}
+            </figure>
+          ))}
+        </div>
+        <dialog class="lightbox" aria-label="Visor de fotos">
+          <div class="lightbox-inner">
+            <>
+              <button class="icon-button close" aria-label="Cerrar visor">
+                <Icon name="close" size={25} />
+              </button>
+              <button class="icon-button prev" aria-label="Foto anterior">
+                <Icon name="left" size={26} />
+              </button>
+              <img id="lightbox-image" alt="" />
+              <button class="icon-button next" aria-label="Foto siguiente">
+                <Icon name="right" size={26} />
+              </button>
+              <div class="lightbox-counter" />
+            </>
+          </div>
+        </dialog>
+      </>
+    ) : (
+      <div class="empty">
+        <>
+          <h1>Este recuerdo no está disponible</h1>
+          <p>
+            Puede que necesites un código de acceso o que el recuerdo ya no
+            exista.
+          </p>
+          <a class="button" href="/acceso">
+            Introducir código
+          </a>
+        </>
+      </div>
+    )
+  }
+  <script>
+    const dialog = document.querySelector<HTMLDialogElement>('.lightbox');
+    const photos = [
+      ...document.querySelectorAll<HTMLButtonElement>('.photo-open'),
+    ];
+    let current = 0;
+    function show(index: number) {
+      current = (index + photos.length) % photos.length;
+      const image =
+        document.querySelector<HTMLImageElement>('#lightbox-image')!;
+      image.src = photos[current].dataset.src!;
+      image.alt = `Foto ${current + 1} de ${photos.length}`;
+      document.querySelector('.lightbox-counter')!.textContent =
+        `${current + 1} / ${photos.length}`;
+    }
+    photos.forEach((button, i) =>
+      button.addEventListener('click', () => {
+        show(i);
+        dialog?.showModal();
+      }),
+    );
+    dialog
+      ?.querySelector('.close')
+      ?.addEventListener('click', () => dialog.close());
+    dialog
+      ?.querySelector('.prev')
+      ?.addEventListener('click', () => show(current - 1));
+    dialog
+      ?.querySelector('.next')
+      ?.addEventListener('click', () => show(current + 1));
+    dialog?.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowLeft') show(current - 1);
+      if (e.key === 'ArrowRight') show(current + 1);
+    });
+    let startX = 0;
+    dialog?.addEventListener(
+      'touchstart',
+      (e) => {
+        startX = e.changedTouches[0].clientX;
+      },
+      { passive: true },
+    );
+    dialog?.addEventListener(
+      'touchend',
+      (e) => {
+        const dx = e.changedTouches[0].clientX - startX;
+        if (Math.abs(dx) > 60) show(current + (dx < 0 ? 1 : -1));
+      },
+      { passive: true },
+    );
+  </script>
+</Layout>

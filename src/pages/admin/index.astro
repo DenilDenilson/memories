@@ -1,0 +1,65 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Icon from '../../components/Icon.astro';
+import MemoryCard from '../../components/MemoryCard.astro';
+import { listMemories } from '../../lib/memories';
+import { monthData } from '../../lib/calendar';
+if (Astro.locals.access.role !== 'admin')
+  return Astro.redirect('/acceso?modo=admin');
+const month = monthData(Astro.url.searchParams.get('mes'));
+const items = listMemories(Astro.locals.access, month.from, month.to).reverse();
+---
+
+<Layout title="Mis recuerdos" section="admin">
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">TU ARCHIVO PERSONAL</p><h1>Mis recuerdos.</h1><p
+        class="lead"
+      >
+        Historias que merecen un lugar en tu calendario.
+      </p>
+    </div><a class="button primary" href="/admin/recuerdo"
+      ><Icon name="plus" size={16} /> Nuevo recuerdo</a
+    >
+  </header>
+  <div class="calendar-toolbar">
+    <div class="month-nav">
+      <h2>{month.label}</h2><div class="nav-arrows">
+        <a
+          class="icon-button"
+          href={`/admin?mes=${month.previous}`}
+          aria-label="Mes anterior"><Icon name="left" size={16} /></a
+        ><a
+          class="icon-button"
+          href={`/admin?mes=${month.next}`}
+          aria-label="Mes siguiente"><Icon name="right" size={16} /></a
+        >
+      </div>
+    </div><span class="muted text-xs">{items.length} recuerdos</span>
+  </div>
+  {
+    items.length ? (
+      <div class="card-grid">
+        {items.map((memory) => (
+          <MemoryCard memory={memory} />
+        ))}
+      </div>
+    ) : (
+      <div class="empty">
+        <>
+          <span class="empty-icon">
+            <Icon name="image" size={28} />
+          </span>
+          <h2>Aquí empieza tu colección</h2>
+          <p>
+            Un paseo, una cena, alguien especial. No hace falta una gran ocasión
+            para guardar un buen día.
+          </p>
+          <a class="button primary" href="/admin/recuerdo">
+            Crear un recuerdo
+          </a>
+        </>
+      </div>
+    )
+  }
+</Layout>

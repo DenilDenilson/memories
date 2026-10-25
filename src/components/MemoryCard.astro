@@ -1,0 +1,46 @@
+---
+import Icon from './Icon.astro';
+import { dateLabel } from '../lib/calendar';
+import type { Memory } from '../lib/memories';
+interface Props {
+  memory: Memory;
+}
+const { memory } = Astro.props;
+---
+
+<a class="memory-card" href={`/recuerdos/${memory.id}`}>
+  {
+    memory.photos[0] && (
+      <img
+        class="card-cover"
+        src={memory.photos[0].previewUrl}
+        alt={memory.title}
+        loading="lazy"
+      />
+    )
+  }
+  <div class="card-content">
+    <p>
+      {dateLabel(memory.date, { day: 'numeric', month: 'long' })} · {
+        memory.photos.length
+      } fotos
+    </p><h2>{memory.title}</h2><div class="badges">
+      <span class="badge"
+        ><Icon
+          name={memory.public
+            ? 'globe'
+            : memory.groupIds?.length
+              ? 'people'
+              : 'lock'}
+          size={11}
+        />{
+          memory.public
+            ? 'Público'
+            : memory.groupIds?.length
+              ? 'Compartido'
+              : 'Privado'
+        }</span
+      >{memory.tags.slice(0, 2).map((tag) => <span class="badge">#{tag}</span>)}
+    </div>
+  </div>
+</a>

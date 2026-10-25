@@ -1,0 +1,88 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Icon from '../components/Icon.astro';
+const mode = Astro.url.searchParams.get('modo') === 'admin' ? 'admin' : 'group';
+---
+
+<Layout title="Acceso">
+  <a class="back-link" href="/"
+    ><Icon name="arrow" size={15} /> Volver al calendario</a
+  >
+  <div class="login-wrap">
+    <div class="panel">
+      <span class="empty-icon"><Icon name="lock" size={26} /></span><p
+        class="eyebrow"
+      >
+        UN ESPACIO PARA COMPARTIR
+      </p><h1>
+        {
+          mode === 'admin'
+            ? 'Bienvenido a tu espacio.'
+            : 'Hay más por recordar.'
+        }
+      </h1><p class="lead">
+        {
+          mode === 'admin'
+            ? 'Tu contraseña es todo lo que necesitas.'
+            : 'Introduce el código que compartieron contigo.'
+        }
+      </p><div class="login-tabs">
+        <a class:list={{ selected: mode === 'group' }} href="/acceso"
+          >Tengo un código</a
+        ><a
+          class:list={{ selected: mode === 'admin' }}
+          href="/acceso?modo=admin">Soy el administrador</a
+        >
+      </div>
+      <form id="access-form" data-mode={mode}>
+        <div class="field">
+          <label for="secret"
+            >{mode === 'admin' ? 'Tu contraseña' : 'Código de acceso'}</label
+          ><input
+            id="secret"
+            name="secret"
+            type="password"
+            required
+            maxlength="256"
+            autocomplete={mode === 'admin' ? 'current-password' : 'off'}
+          />
+        </div><p class="error" id="form-error" role="alert" hidden></p><button
+          class="button primary w-full"
+          type="submit"
+          >{mode === 'admin' ? 'Abrir mi espacio' : 'Ver recuerdos'}
+          <Icon name="right" size={16} /></button
+        ><p class="hint mt-4 text-center">
+          Sin registros. Solo momentos que compartir.
+        </p>
+      </form>
+    </div>
+  </div>
+  <script>
+    const form = document.querySelector<HTMLFormElement>('#access-form')!;
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const button = form.querySelector('button')!;
+      const error = document.querySelector<HTMLElement>('#form-error')!;
+      button.disabled = true;
+      error.hidden = true;
+      try {
+        const response = await fetch('/api/v1/session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            secret: new FormData(form).get('secret'),
+            mode: form.dataset.mode,
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error);
+        window.location.assign(form.dataset.mode === 'admin' ? '/admin' : '/');
+      } catch (e) {
+        error.textContent =
+          e instanceof Error ? e.message : 'No se pudo conectar.';
+        error.hidden = false;
+        button.disabled = false;
+      }
+    });
+  </script>
+</Layout>
