@@ -5,12 +5,12 @@ import {
   primaryKey,
 } from 'drizzle-orm/sqlite-core';
 
-export const groups = sqliteTable('groups', {
+export const groups = sqliteTable('denil_groups', {
   id: text('id').primaryKey(),
   name: text('name').notNull().unique(),
   codeHash: text('code_hash').notNull(),
 });
-export const memories = sqliteTable('memories', {
+export const memories = sqliteTable('denil_memories', {
   id: text('id').primaryKey(),
   date: text('date').notNull(),
   title: text('title').notNull(),
@@ -20,7 +20,7 @@ export const memories = sqliteTable('memories', {
   createdAt: text('created_at').notNull(),
 });
 export const audiences = sqliteTable(
-  'audiences',
+  'denil_audiences',
   {
     memoryId: text('memory_id')
       .notNull()
@@ -31,7 +31,7 @@ export const audiences = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.memoryId, t.groupId] })],
 );
-export const photos = sqliteTable('photos', {
+export const photos = sqliteTable('denil_photos', {
   id: text('id').primaryKey(),
   memoryId: text('memory_id')
     .notNull()
@@ -41,8 +41,11 @@ export const photos = sqliteTable('photos', {
   size: integer('size').notNull(),
   width: integer('width').notNull(),
   height: integer('height').notNull(),
+  originalKey: text('original_key').notNull(),
+  previewKey: text('preview_key').notNull(),
+  thumbKey: text('thumb_key').notNull(),
 });
-export const sessions = sqliteTable('sessions', {
+export const sessions = sqliteTable('denil_sessions', {
   hash: text('hash').primaryKey(),
   role: text('role', { enum: ['admin', 'group'] }).notNull(),
   groupId: text('group_id').references(() => groups.id, {
@@ -51,4 +54,18 @@ export const sessions = sqliteTable('sessions', {
   expiresAt: integer('expires_at').notNull(),
   kind: text('kind', { enum: ['session', 'token'] }).notNull(),
   label: text('label').notNull().default(''),
+});
+export const uploads = sqliteTable('denil_uploads', {
+  id: text('id').primaryKey(),
+  uploadKey: text('upload_key').notNull(),
+  date: text('date').notNull(),
+  title: text('title').notNull(),
+  size: integer('size').notNull(),
+  state: text('state', {
+    enum: ['pending', 'processing', 'ready', 'used', 'deleting'],
+  })
+    .notNull()
+    .default('pending'),
+  payload: text('payload'),
+  expiresAt: integer('expires_at').notNull(),
 });

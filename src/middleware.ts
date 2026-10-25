@@ -1,13 +1,15 @@
 import { defineMiddleware } from 'astro:middleware';
 import { resolveAccess } from './lib/auth';
+import { ensureDatabase } from './lib/db';
 
 export const onRequest = defineMiddleware(async (context, next) => {
+  await ensureDatabase();
   const bearer = context.request.headers
     .get('authorization')
     ?.match(/^Bearer (.+)$/)?.[1];
   context.locals.access = bearer
-    ? resolveAccess(bearer, 'token')
-    : resolveAccess(context.cookies.get('dm_session')?.value);
+    ? await resolveAccess(bearer, 'token')
+    : await resolveAccess(context.cookies.get('dm_session')?.value);
   if (
     context.url.pathname.startsWith('/api/') &&
     !['GET', 'HEAD', 'OPTIONS'].includes(context.request.method) &&

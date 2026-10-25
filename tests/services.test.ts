@@ -3,13 +3,14 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import sharp from 'sharp';
 import { eq } from 'drizzle-orm';
-import { db, sqlite } from '../src/lib/db';
+import { db, client, ensureDatabase } from '../src/lib/db';
 import {
   groups,
   memories,
   audiences,
   photos,
   sessions,
+  uploads,
 } from '../src/lib/schema';
 import {
   hashSecret,
@@ -21,13 +22,28 @@ import {
 } from '../src/lib/auth';
 import { getMemory, listMemories } from '../src/lib/memories';
 import { processPhoto } from '../src/lib/images';
-import { getFile, deletePhotoFiles } from '../src/lib/storage';
+import { getFile, putFile, deletePhotoFiles } from '../src/lib/storage';
+import {
+  createUpload,
+  completeUpload,
+  cleanupUploads,
+} from '../src/lib/uploads';
+import { photoFilename } from '../src/lib/filenames';
 
-afterAll(() => sqlite.close());
+await client.execute(
+  'CREATE TABLE "syt-sessions" (id TEXT PRIMARY KEY, value TEXT)',
+);
+await client.execute(
+  "INSERT INTO \"syt-sessions\" VALUES ('existing', 'preserve-me')",
+);
+await client.execute('PRAGMA user_version = 77');
+await ensureDatabase();
+afterAll(() => client.close());
 const friend = randomUUID();
 const family = randomUUID();
 const code = 'friends-code-123';
-db.insert(groups)
+await db
+  .insert(groups)
   .values([
     { id: friend, name: 'Amigos', codeHash: hashSecret(code) },
     { id: family, name: 'Familia', codeHash: hashSecret('family-code-123') },
@@ -41,7 +57,8 @@ const ids = {
   both: randomUUID(),
 };
 for (const [name, id] of Object.entries(ids)) {
-  db.insert(memories)
+  await db
+    .insert(memories)
     .values({
       id,
       title: name,
@@ -51,7 +68,8 @@ for (const [name, id] of Object.entries(ids)) {
     })
     .run();
 }
-db.insert(audiences)
+await db
+  .insert(audiences)
   .values([
     { memoryId: ids.friend, groupId: friend },
     { memoryId: ids.family, groupId: family },
@@ -60,18 +78,33 @@ db.insert(audiences)
   ])
   .run();
 
-describe('permisos integrados con SQLite', () => {
-  it('el público solo ve lo público incluso con un identificador conocido', () => {
+describe('base compartida y permisos', () => {
+  it('preserva tablas ajenas y su versión global de SQLite', async () => {
     expect(
-      listMemories({ role: 'public' }, '2026-10-01', '2026-10-31').map(
+      (await client.execute('SELECT value FROM "syt-sessions"')).rows[0].value,
+    ).toBe('preserve-me');
+    expect(
+      (await client.execute('PRAGMA user_version')).rows[0].user_version,
+    ).toBe(77);
+    expect(
+      (
+        await client.execute(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'denil_%'",
+        )
+      ).rows.map((r) => r.name),
+    ).toEqual(['syt-sessions']);
+  });
+  it('el público solo ve lo público incluso con un identificador conocido', async () => {
+    expect(
+      (await listMemories({ role: 'public' }, '2026-10-01', '2026-10-31')).map(
         (m) => m.id,
       ),
     ).toEqual([ids.public]);
-    expect(getMemory(ids.private, { role: 'public' })).toBeNull();
-    expect(getMemory(ids.friend, { role: 'public' })).toBeNull();
+    expect(await getMemory(ids.private, { role: 'public' })).toBeNull();
+    expect(await getMemory(ids.friend, { role: 'public' })).toBeNull();
   });
-  it('los grupos son independientes, combinables y también ven lo público', () => {
-    const results = listMemories(
+  it('los grupos son independientes, combinables y también ven lo público', async () => {
+    const results = await listMemories(
       { role: 'group', groupId: friend },
       '2026-10-01',
       '2026-10-31',
@@ -80,16 +113,16 @@ describe('permisos integrados con SQLite', () => {
       new Set([ids.public, ids.friend, ids.both]),
     );
     expect(
-      getMemory(ids.friend, { role: 'group', groupId: family }),
+      await getMemory(ids.friend, { role: 'group', groupId: family }),
     ).toBeNull();
     expect(results.every((m) => m.groupIds === undefined)).toBe(true);
   });
-  it('el administrador ve todo y el filtro por fecha se aplica', () => {
+  it('el administrador ve todo y el filtro por fecha se aplica', async () => {
     expect(
-      listMemories({ role: 'admin' }, '2026-10-01', '2026-10-31'),
+      await listMemories({ role: 'admin' }, '2026-10-01', '2026-10-31'),
     ).toHaveLength(5);
     expect(
-      listMemories({ role: 'admin' }, '2026-11-01', '2026-11-30'),
+      await listMemories({ role: 'admin' }, '2026-11-01', '2026-11-30'),
     ).toHaveLength(0);
   });
 });
@@ -102,53 +135,69 @@ describe('códigos y sesiones', () => {
     expect(verifySecret('incorrect', hash)).toBe(false);
     expect(verifySecret('a-password', 'scrypt:bad:nope')).toBe(false);
   });
-  it('autentica el grupo y separa tokens API de cookies de sesión', () => {
-    expect(authenticate(code, 'group')).toMatchObject({
+  it('autentica el grupo y separa tokens API de cookies de sesión', async () => {
+    expect(await authenticate(code, 'group')).toMatchObject({
       role: 'group',
       groupId: friend,
     });
-    expect(authenticate('wrong', 'group')).toBeNull();
-    const token = issueSession({ role: 'admin' }, 'token', 'test');
-    expect(resolveAccess(token)).toEqual({ role: 'public' });
-    expect(resolveAccess(token, 'token')).toEqual({ role: 'admin' });
+    expect(await authenticate('wrong', 'group')).toBeNull();
+    const token = await issueSession({ role: 'admin' }, 'token', 'test');
+    expect(await resolveAccess(token)).toEqual({ role: 'public' });
+    expect(await resolveAccess(token, 'token')).toEqual({ role: 'admin' });
   });
-  it('invalida sesiones al revocarlas y rechaza sesiones caducadas', () => {
-    const token = issueSession({ role: 'group', groupId: friend });
-    expect(resolveAccess(token).role).toBe('group');
-    db.update(sessions)
+  it('invalida sesiones al revocarlas y rechaza sesiones caducadas', async () => {
+    const token = await issueSession({ role: 'group', groupId: friend });
+    expect((await resolveAccess(token)).role).toBe('group');
+    await db
+      .update(sessions)
       .set({ expiresAt: 0 })
       .where(eq(sessions.groupId, friend))
       .run();
-    expect(resolveAccess(token).role).toBe('public');
-    const next = issueSession({ role: 'group', groupId: friend });
-    db.delete(sessions).where(eq(sessions.groupId, friend)).run();
-    expect(resolveAccess(next).role).toBe('public');
+    expect((await resolveAccess(token)).role).toBe('public');
+    const next = await issueSession({ role: 'group', groupId: friend });
+    await db.delete(sessions).where(eq(sessions.groupId, friend)).run();
+    expect((await resolveAccess(next)).role).toBe('public');
   });
-  it('limita intentos persistentes de acceso', () => {
-    for (let i = 0; i < 10; i++) expect(allowAttempt('test-ip')).toBe(true);
-    expect(allowAttempt('test-ip')).toBe(false);
-    expect(allowAttempt('another-ip')).toBe(true);
+  it('limita intentos persistentes de acceso de forma atómica', async () => {
+    for (let i = 0; i < 10; i++)
+      expect(await allowAttempt('test-ip')).toBe(true);
+    expect(await allowAttempt('test-ip')).toBe(false);
+    expect(await allowAttempt('another-ip')).toBe(true);
   });
 });
-describe('imágenes y almacenamiento privado', () => {
-  it('convierte HEIC real a JPEG y mantiene el archivo HEIC original intacto', async () => {
+describe('nombres, imágenes y almacenamiento privado', () => {
+  it('usa nombres ordenables por fecha y slugs seguros, sin depender del nombre original', () => {
+    expect(
+      photoFilename(
+        '2026-10-25',
+        'Día personal / París',
+        'abc12345-6789-0000-0000-000000000000',
+        'png',
+      ),
+    ).toBe('20261025-dia-personal-paris-abc123456789.png');
+    expect(photoFilename('2026-10-26', '💚', 'abc123456789', 'jpg')).toBe(
+      '20261026-personal-abc123456789.jpg',
+    );
+  });
+  it('convierte HEIC real y mantiene el archivo original intacto', async () => {
     const bytes = await readFile(
       new URL('./fixtures/sample.heic', import.meta.url),
     );
     const photo = await processPhoto(
-      new File([new Uint8Array(bytes)], 'iphone.HEIC', { type: 'image/heic' }),
+      new File([new Uint8Array(bytes)], 'iphone.HEIC'),
       ids.private,
+      '2026-10-25',
+      'Personal',
     );
     expect(photo.mime).toBe('image/heic');
-    expect(await getFile(`${photo.id}/original`)).toEqual(bytes);
-    const metadata = await sharp(
-      await getFile(`${photo.id}/preview`),
-    ).metadata();
+    expect(photo.filename).toMatch(/^20261025-personal-[a-f0-9]{12}\.heic$/);
+    expect(await getFile(photo.originalKey)).toEqual(bytes);
+    const metadata = await sharp(await getFile(photo.previewKey)).metadata();
     expect(metadata.format).toBe('jpeg');
     expect(metadata.width).toBe(64);
-    await deletePhotoFiles(photo.id);
+    await deletePhotoFiles(photo);
   });
-  it('conserva el original exacto, crea variantes sin EXIF y oculta la descarga al visitante', async () => {
+  it('crea variantes sin EXIF y oculta la descarga al visitante', async () => {
     const original = await sharp({
       create: { width: 800, height: 600, channels: 3, background: '#78916a' },
     })
@@ -156,35 +205,125 @@ describe('imágenes y almacenamiento privado', () => {
       .withMetadata()
       .toBuffer();
     const photo = await processPhoto(
-      new File([new Uint8Array(original)], 'original.jpg', {
-        type: 'image/jpeg',
-      }),
+      new File([new Uint8Array(original)], 'original.jpg'),
       ids.public,
+      '2026-10-05',
+      'Public',
     );
-    db.insert(photos).values(photo).run();
-    expect(await getFile(`${photo.id}/original`)).toEqual(original);
-    const metadata = await sharp(
-      await getFile(`${photo.id}/preview`),
-    ).metadata();
-    expect(metadata.exif).toBeUndefined();
+    await db.insert(photos).values(photo).run();
+    expect(await getFile(photo.originalKey)).toEqual(original);
     expect(
-      (await sharp(await getFile(`${photo.id}/thumb`)).metadata()).width,
-    ).toBe(360);
+      (await sharp(await getFile(photo.previewKey)).metadata()).exif,
+    ).toBeUndefined();
+    expect((await sharp(await getFile(photo.thumbKey)).metadata()).width).toBe(
+      360,
+    );
     expect(
-      getMemory(ids.public, { role: 'public' })!.photos[0],
+      (await getMemory(ids.public, { role: 'public' }))!.photos[0],
     ).not.toHaveProperty('originalUrl');
     expect(
-      getMemory(ids.public, { role: 'admin' })!.photos[0].originalUrl,
+      (await getMemory(ids.public, { role: 'admin' }))!.photos[0].originalUrl,
     ).toContain('/original');
-    await deletePhotoFiles(photo.id);
-    await expect(getFile(`${photo.id}/original`)).rejects.toThrow();
+    await deletePhotoFiles(photo);
+    await expect(getFile(photo.originalKey)).rejects.toThrow();
   });
-  it('rechaza archivos falsos y vacíos', async () => {
+  it('rechaza archivos falsos, vacíos y claves fuera del espacio de esta aplicación', async () => {
     await expect(
-      processPhoto(new File(['not an image'], 'fake.jpg'), ids.public),
+      processPhoto(
+        new File(['not an image'], 'fake.jpg'),
+        ids.public,
+        '2026-10-05',
+        'test',
+      ),
     ).rejects.toThrow();
     await expect(
-      processPhoto(new File([], 'empty.jpg'), ids.public),
+      processPhoto(new File([], 'empty.jpg'), ids.public, '2026-10-05', 'test'),
     ).rejects.toThrow();
+    await expect(getFile('other-app/photo.jpg')).rejects.toThrow('Clave');
+    await expect(getFile('denil-memories/../../secret')).rejects.toThrow(
+      'Clave',
+    );
+  });
+});
+it('no confunde AVIF con HEIC y no sobrescribe fotos con un nombre existente', async () => {
+  const bytes = await sharp({
+    create: { width: 64, height: 48, channels: 3, background: '#82996c' },
+  })
+    .avif()
+    .toBuffer();
+  const id = randomUUID();
+  const photo = await processPhoto(
+    new File([new Uint8Array(bytes)], 'image.avif'),
+    ids.private,
+    '2026-10-25',
+    'Personal',
+    id,
+  );
+  expect(photo.filename).toMatch(/\.avif$/);
+  expect(photo.mime).toBe('image/avif');
+  await expect(
+    processPhoto(
+      new File([new Uint8Array(bytes)], 'image.avif'),
+      ids.private,
+      '2026-10-25',
+      'Personal',
+      id,
+    ),
+  ).rejects.toThrow();
+  expect(await getFile(photo.originalKey)).toEqual(bytes);
+  await deletePhotoFiles(photo);
+});
+describe('subidas directas', () => {
+  it('limpiar autorizaciones utilizadas no elimina fotos publicadas', async () => {
+    const bytes = await sharp({
+      create: { width: 64, height: 48, channels: 3, background: '#779966' },
+    })
+      .png()
+      .toBuffer();
+    const ticket = await createUpload('2026-10-25', 'Personal', bytes.length);
+    const row = (await db
+      .select()
+      .from(uploads)
+      .where(eq(uploads.id, ticket.id))
+      .get())!;
+    await putFile(row.uploadKey, bytes, 'application/octet-stream');
+    const photo = await completeUpload(ticket.id);
+    await db
+      .insert(photos)
+      .values({ ...photo, memoryId: ids.private })
+      .run();
+    await db
+      .update(uploads)
+      .set({ state: 'used', payload: null, expiresAt: 0 })
+      .where(eq(uploads.id, ticket.id))
+      .run();
+    await cleanupUploads();
+    expect(await getFile(photo.originalKey)).toEqual(bytes);
+    await deletePhotoFiles(photo);
+  });
+  it('prepara una foto una sola vez y limpia subidas abandonadas', async () => {
+    const bytes = await sharp({
+      create: { width: 64, height: 48, channels: 3, background: '#779966' },
+    })
+      .png()
+      .toBuffer();
+    const ticket = await createUpload('2026-10-25', 'Personal', bytes.length);
+    expect(ticket.uploadUrl).toBe(`/api/v1/uploads/${ticket.id}/file`);
+    const row = (await db
+      .select()
+      .from(uploads)
+      .where(eq(uploads.id, ticket.id))
+      .get())!;
+    await putFile(row.uploadKey, bytes, 'application/octet-stream');
+    const photo = await completeUpload(ticket.id);
+    expect(photo.filename).toMatch(/^20261025-personal-[a-f0-9]{12}\.png$/);
+    expect((await completeUpload(ticket.id)).id).toBe(photo.id);
+    await db
+      .update(uploads)
+      .set({ expiresAt: 0 })
+      .where(eq(uploads.id, ticket.id))
+      .run();
+    expect(await cleanupUploads()).toBe(1);
+    await expect(getFile(photo.originalKey)).rejects.toThrow();
   });
 });

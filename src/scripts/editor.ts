@@ -36,36 +36,65 @@ form.addEventListener('submit', async (event) => {
   const files = [...(input.files || [])];
   if (files.some((f) => f.size > 30 * 1024 * 1024))
     return showError('Cada foto puede pesar hasta 30 MB.');
-  if (files.reduce((sum, f) => sum + f.size, 0) > 99 * 1024 * 1024)
-    return showError(
-      'Selecciona menos de 100 MB por subida. Puedes añadir más fotos al editar.',
-    );
+  if (files.length > 30)
+    return showError('Selecciona hasta 30 fotos por recuerdo.');
   const tags = String(fields.get('tags') || '')
     .split(',')
     .map((tag) => tag.trim())
     .filter(Boolean);
   if (tags.length > 15 || tags.some((t) => t.length > 40))
     return showError('Usa hasta 15 etiquetas de máximo 40 caracteres.');
-  const body = new FormData();
-  body.set(
-    'metadata',
-    JSON.stringify({
-      title: fields.get('title'),
-      date: fields.get('date'),
-      description: fields.get('description'),
-      tags,
-      public: fields.has('public'),
-      groupIds: fields.getAll('groups'),
-    }),
-  );
-  files.forEach((file) => body.append('photos', file));
+  const metadata = {
+    title: fields.get('title'),
+    date: fields.get('date'),
+    description: fields.get('description'),
+    tags,
+    public: fields.has('public'),
+    groupIds: fields.getAll('groups'),
+  };
   const button = form.querySelector<HTMLButtonElement>('button[type=submit]')!;
   button.disabled = true;
   status.hidden = false;
   try {
+    const uploadIds: string[] = [];
+    for (const [index, file] of files.entries()) {
+      status.textContent = `Subiendo foto ${index + 1} de ${files.length}…`;
+      const authorization = await fetch('/api/v1/uploads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          date: metadata.date,
+          title: metadata.title,
+          size: file.size,
+        }),
+      });
+      const ticket = await authorization.json();
+      if (!authorization.ok) throw new Error(ticket.error);
+      const sent = await fetch(ticket.uploadUrl, {
+        method: 'PUT',
+        headers: ticket.headers,
+        body: file,
+      });
+      if (!sent.ok)
+        throw new Error(
+          'No se pudo subir la foto. Comprueba la conexión y el CORS del bucket R2.',
+        );
+      status.textContent = `Preparando foto ${index + 1} de ${files.length}…`;
+      const completion = await fetch(`/api/v1/uploads/${ticket.id}/complete`, {
+        method: 'POST',
+      });
+      const result = await completion.json();
+      if (!completion.ok) throw new Error(result.error);
+      uploadIds.push(ticket.id);
+    }
+    status.textContent = 'Guardando tu recuerdo…';
     const response = await fetch(
       `/api/v1/memories${form.dataset.id ? `/${form.dataset.id}` : ''}`,
-      { method: form.dataset.id ? 'PUT' : 'POST', body },
+      {
+        method: form.dataset.id ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ metadata, uploadIds }),
+      },
     );
     const result = await response.json();
     if (!response.ok) throw new Error(result.error);

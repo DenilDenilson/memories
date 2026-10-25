@@ -7,6 +7,7 @@ export default [
   {
     ignores: [
       'dist/**',
+      '.vercel/**',
       '.astro/**',
       'data/**',
       'playwright-report/**',

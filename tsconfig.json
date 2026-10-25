@@ -1,5 +1,5 @@
 {
   "extends": "astro/tsconfigs/strict",
   "include": [".astro/types.d.ts", "**/*"],
-  "exclude": ["dist", "node_modules", "playwright-report"]
+  "exclude": ["dist", ".vercel", "node_modules", "playwright-report"]
 }

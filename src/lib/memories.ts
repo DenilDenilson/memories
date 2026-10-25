@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from './db';
 import { audiences, memories, photos } from './schema';
 import type { Access } from './auth';
+import { photoFilename } from './filenames';
 
 export const dateSchema = z
   .string()
@@ -30,8 +31,8 @@ export function visibility(access: Access) {
   }
   return eq(memories.public, true);
 }
-export function listMemories(access: Access, from: string, to: string) {
-  const rows = db
+export async function listMemories(access: Access, from: string, to: string) {
+  const rows = await db
     .select()
     .from(memories)
     .where(
@@ -39,18 +40,18 @@ export function listMemories(access: Access, from: string, to: string) {
     )
     .orderBy(asc(memories.date), asc(memories.createdAt))
     .all();
-  return rows.map((row) => hydrate(row, access));
+  return Promise.all(rows.map((row) => hydrate(row, access)));
 }
-export function getMemory(id: string, access: Access) {
-  const row = db
+export async function getMemory(id: string, access: Access) {
+  const row = await db
     .select()
     .from(memories)
     .where(and(eq(memories.id, id), visibility(access)))
     .get();
   return row ? hydrate(row, access) : null;
 }
-function hydrate(row: typeof memories.$inferSelect, access: Access) {
-  const items = db
+async function hydrate(row: typeof memories.$inferSelect, access: Access) {
+  const items = await db
     .select()
     .from(photos)
     .where(eq(photos.memoryId, row.id))
@@ -60,12 +61,13 @@ function hydrate(row: typeof memories.$inferSelect, access: Access) {
     tags: JSON.parse(row.tags) as string[],
     groupIds:
       access.role === 'admin'
-        ? db
-            .select()
-            .from(audiences)
-            .where(eq(audiences.memoryId, row.id))
-            .all()
-            .map((a) => a.groupId)
+        ? (
+            await db
+              .select()
+              .from(audiences)
+              .where(eq(audiences.memoryId, row.id))
+              .all()
+          ).map((a) => a.groupId)
         : undefined,
     photos: items.map((photo) => ({
       id: photo.id,
@@ -75,7 +77,12 @@ function hydrate(row: typeof memories.$inferSelect, access: Access) {
       previewUrl: `/api/v1/photos/${photo.id}/preview`,
       ...(access.role === 'admin'
         ? {
-            filename: photo.filename,
+            filename: photoFilename(
+              row.date,
+              row.title,
+              photo.id,
+              photo.filename.split('.').pop()!,
+            ),
             size: photo.size,
             originalUrl: `/api/v1/photos/${photo.id}/original`,
           }
@@ -83,4 +90,4 @@ function hydrate(row: typeof memories.$inferSelect, access: Access) {
     })),
   };
 }
-export type Memory = NonNullable<ReturnType<typeof getMemory>>;
+export type Memory = NonNullable<Awaited<ReturnType<typeof getMemory>>>;

@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import sharp from 'sharp';
+import { readFile } from 'node:fs/promises';
 
 test('API: validación, publicación pública, subida múltiple y revocación de tokens', async ({
   request,
@@ -41,7 +42,7 @@ test('API: validación, publicación pública, subida múltiple y revocación de
     (
       await request.post('/api/v1/memories', {
         headers: auth,
-        multipart: { metadata: JSON.stringify(metadata) },
+        data: { metadata, uploadIds: [] },
       })
     ).status(),
   ).toBe(400);
@@ -50,20 +51,54 @@ test('API: validación, publicación pública, subida múltiple y revocación de
   })
     .jpeg()
     .toBuffer();
+  async function uploadPhoto(bytes: Buffer = image) {
+    const response = await request.post('/api/v1/uploads', {
+      headers: auth,
+      data: { date: metadata.date, title: metadata.title, size: bytes.length },
+    });
+    expect(response.status()).toBe(201);
+    const ticket = await response.json();
+    expect(
+      (
+        await request.put(ticket.uploadUrl, {
+          headers: { ...ticket.headers, ...headers },
+          data: bytes,
+        })
+      ).status(),
+    ).toBe(200);
+    expect(
+      (
+        await request.post(`/api/v1/uploads/${ticket.id}/complete`, {
+          headers: auth,
+        })
+      ).status(),
+    ).toBe(200);
+    return ticket.id as string;
+  }
+  const firstUpload = await uploadPhoto();
   const created = await request.post('/api/v1/memories', {
     headers: auth,
-    multipart: {
-      metadata: JSON.stringify(metadata),
-      photos: { name: 'one.jpg', mimeType: 'image/jpeg', buffer: image },
-    },
+    data: { metadata, uploadIds: [firstUpload] },
   });
   expect(created.status()).toBe(201);
   const { memory } = await created.json();
+  expect(
+    (
+      await request.post('/api/v1/memories', {
+        headers: auth,
+        data: { metadata, uploadIds: [firstUpload] },
+      })
+    ).status(),
+  ).toBe(400);
   const update = await request.put(`/api/v1/memories/${memory.id}`, {
     headers: auth,
-    multipart: {
-      metadata: JSON.stringify(metadata),
-      photos: { name: 'two.jpg', mimeType: 'image/jpeg', buffer: image },
+    data: {
+      metadata,
+      uploadIds: [
+        await uploadPhoto(
+          await readFile(new URL('../fixtures/sample.heic', import.meta.url)),
+        ),
+      ],
     },
   });
   expect((await update.json()).memory.photos).toHaveLength(2);
@@ -164,7 +199,7 @@ test('álbum completo: administración, API, privacidad y código de grupo', asy
   await page.getByLabel('Elige las fotos de este momento').setInputFiles({
     name: 'memory.jpg',
     mimeType: 'image/jpeg',
-    buffer: image,
+    buffer: Buffer.concat([image, Buffer.alloc(5 * 1024 * 1024)]),
   });
   await page
     .getByRole('button', { name: 'Guardar recuerdo', exact: true })
@@ -177,7 +212,9 @@ test('álbum completo: administración, API, privacidad y código de grupo', asy
   await page.getByRole('button', { name: 'Cerrar visor' }).click();
   const download = page.waitForEvent('download');
   await page.getByRole('link', { name: 'Descargar original 1' }).click();
-  expect((await download).suggestedFilename()).toBe('memory.jpg');
+  expect((await download).suggestedFilename()).toMatch(
+    /^\d{8}-un-dia-especial-(desktop|mobile)-[a-f0-9]{12}\.jpg$/,
+  );
   // Un visitante no obtiene datos ni imágenes aunque conozca sus identificadores.
   expect((await request.get(`/api/v1/memories/${memoryId}`)).status()).toBe(
     404,

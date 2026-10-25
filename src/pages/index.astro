@@ -5,7 +5,7 @@ import { monthData, today } from '../lib/calendar';
 import { listMemories } from '../lib/memories';
 const calendar = monthData(Astro.url.searchParams.get('mes'));
 const access = Astro.locals.access;
-const items = listMemories(access, calendar.from, calendar.to);
+const items = await listMemories(access, calendar.from, calendar.to);
 const photoCount = items.reduce((sum, m) => sum + m.photos.length, 0);
 const dayCount = new Set(items.map((m) => m.date)).size;
 ---

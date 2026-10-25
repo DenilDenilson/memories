@@ -5,7 +5,7 @@ import {
   timingSafeEqual,
 } from 'node:crypto';
 import { and, eq, lt } from 'drizzle-orm';
-import { db, sqlite } from './db';
+import { db, client } from './db';
 import { groups, sessions } from './schema';
 
 export type Access = {
@@ -26,7 +26,7 @@ export function verifySecret(value: string, stored: string) {
 }
 export const digest = (value: string) =>
   createHash('sha256').update(value).digest('hex');
-export function issueSession(
+export async function issueSession(
   access: Access,
   kind: 'session' | 'token' = 'session',
   label = '',
@@ -34,8 +34,9 @@ export function issueSession(
   if (access.role === 'public')
     throw new Error('No se puede abrir una sesión pública');
   const token = randomBytes(32).toString('base64url');
-  db.delete(sessions).where(lt(sessions.expiresAt, Date.now())).run();
-  db.insert(sessions)
+  await db.delete(sessions).where(lt(sessions.expiresAt, Date.now())).run();
+  await db
+    .insert(sessions)
     .values({
       hash: digest(token),
       role: access.role,
@@ -47,12 +48,12 @@ export function issueSession(
     .run();
   return token;
 }
-export function resolveAccess(
+export async function resolveAccess(
   token?: string,
   kind: 'session' | 'token' = 'session',
-): Access {
+): Promise<Access> {
   if (!token || token.length > 200) return publicAccess;
-  const session = db
+  const session = await db
     .select()
     .from(sessions)
     .where(and(eq(sessions.hash, digest(token)), eq(sessions.kind, kind)))
@@ -60,13 +61,16 @@ export function resolveAccess(
   if (!session || session.expiresAt <= Date.now()) return publicAccess;
   if (session.role === 'admin') return { role: 'admin' };
   const group = session.groupId
-    ? db.select().from(groups).where(eq(groups.id, session.groupId)).get()
+    ? await db.select().from(groups).where(eq(groups.id, session.groupId)).get()
     : undefined;
   return group
     ? { role: 'group', groupId: group.id, name: group.name }
     : publicAccess;
 }
-export function authenticate(secret: string, mode: string): Access | null {
+export async function authenticate(
+  secret: string,
+  mode: string,
+): Promise<Access | null> {
   if (mode === 'admin') {
     return verifySecret(secret, process.env.ADMIN_PASSWORD_HASH || '')
       ? { role: 'admin' }
@@ -74,24 +78,25 @@ export function authenticate(secret: string, mode: string): Access | null {
   }
   // Se verifican todos los grupos para no dar información sobre el código coincidente.
   let result: Access | null = null;
-  for (const group of db.select().from(groups).all()) {
+  for (const group of await db.select().from(groups).all()) {
     if (verifySecret(secret, group.codeHash))
       result = { role: 'group', groupId: group.id, name: group.name };
   }
   return result;
 }
-export function allowAttempt(ip: string) {
+export async function allowAttempt(ip: string) {
   const key = digest(ip);
   const now = Date.now();
-  sqlite.prepare('DELETE FROM attempts WHERE reset_at <= ?').run(now);
-  sqlite
-    .prepare(
-      `INSERT INTO attempts(key, count, reset_at) VALUES (?, 1, ?)
-    ON CONFLICT(key) DO UPDATE SET count = count + 1`,
-    )
-    .run(key, now + 15 * 60000);
-  const row = sqlite
-    .prepare('SELECT count FROM attempts WHERE key = ?')
-    .get(key) as { count: number };
-  return row.count <= 10;
+  const results = await client.batch(
+    [
+      { sql: 'DELETE FROM denil_attempts WHERE reset_at <= ?', args: [now] },
+      {
+        sql: `INSERT INTO denil_attempts(key, count, reset_at) VALUES (?, 1, ?)
+      ON CONFLICT(key) DO UPDATE SET count = count + 1 RETURNING count`,
+        args: [key, now + 15 * 60000],
+      },
+    ],
+    'write',
+  );
+  return Number(results[1].rows[0].count) <= 10;
 }

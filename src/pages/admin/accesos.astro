@@ -6,11 +6,11 @@ import { groups, sessions } from '../../lib/schema';
 import { eq } from 'drizzle-orm';
 if (Astro.locals.access.role !== 'admin')
   return Astro.redirect('/acceso?modo=admin');
-const allGroups = db
+const allGroups = await db
   .select({ id: groups.id, name: groups.name })
   .from(groups)
   .all();
-const tokens = db
+const tokens = await db
   .select({
     id: sessions.hash,
     label: sessions.label,

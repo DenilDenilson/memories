@@ -7,7 +7,7 @@ import { dateLabel } from '../../lib/calendar';
 const parsed = dateSchema.safeParse(Astro.params.date);
 if (!parsed.success) return Astro.redirect('/404');
 const date = parsed.data;
-const items = listMemories(Astro.locals.access, date, date);
+const items = await listMemories(Astro.locals.access, date, date);
 ---
 
 <Layout title={dateLabel(date)}>

@@ -7,7 +7,9 @@ import { monthData } from '../../lib/calendar';
 if (Astro.locals.access.role !== 'admin')
   return Astro.redirect('/acceso?modo=admin');
 const month = monthData(Astro.url.searchParams.get('mes'));
-const items = listMemories(Astro.locals.access, month.from, month.to).reverse();
+const items = (
+  await listMemories(Astro.locals.access, month.from, month.to)
+).reverse();
 ---
 
 <Layout title="Mis recuerdos" section="admin">

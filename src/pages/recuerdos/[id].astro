@@ -3,7 +3,7 @@ import Layout from '../../layouts/Layout.astro';
 import Icon from '../../components/Icon.astro';
 import { getMemory } from '../../lib/memories';
 import { dateLabel } from '../../lib/calendar';
-const memory = getMemory(Astro.params.id!, Astro.locals.access);
+const memory = await getMemory(Astro.params.id!, Astro.locals.access);
 if (!memory) {
   Astro.response.status = 404;
 }

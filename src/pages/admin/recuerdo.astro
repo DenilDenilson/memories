@@ -8,9 +8,9 @@ import { today } from '../../lib/calendar';
 if (Astro.locals.access.role !== 'admin')
   return Astro.redirect('/acceso?modo=admin');
 const id = Astro.url.searchParams.get('id');
-const memory = id ? getMemory(id, Astro.locals.access) : null;
+const memory = id ? await getMemory(id, Astro.locals.access) : null;
 if (id && !memory) return Astro.redirect('/404');
-const availableGroups = db
+const availableGroups = await db
   .select({ id: groups.id, name: groups.name })
   .from(groups)
   .all();
@@ -78,8 +78,8 @@ const date =
         <Icon name="image" size={30} /><label for="photos"
           >Elige las fotos de este momento</label
         ><p class="hint">
-          JPEG, PNG, WebP, AVIF o HEIC de iPhone · 30 MB por foto · 100 MB por
-          subida
+          JPEG, PNG, WebP, AVIF o HEIC de iPhone · 30 MB por foto · Hasta 30
+          fotos
         </p><input
           id="photos"
           name="photos"

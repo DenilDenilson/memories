@@ -1,15 +1,24 @@
 import sharp from 'sharp';
 import convert from 'heic-convert';
 import { randomUUID } from 'node:crypto';
-import { putFile, deletePhotoFiles } from './storage';
+import { putFile, deleteFile } from './storage';
+import { photoFilename, photoKeys } from './filenames';
 
-export async function processPhoto(file: File, memoryId: string) {
+export async function processPhoto(
+  file: File,
+  memoryId: string,
+  date: string,
+  title: string,
+  id: string = randomUUID(),
+) {
   if (file.size === 0 || file.size > 30 * 1024 * 1024)
     throw new Error('Cada foto debe pesar entre 1 byte y 30 MB.');
   const original = Buffer.from(await file.arrayBuffer());
+  const brands = original.subarray(8, 40).toString();
   const isHeic =
     original.subarray(4, 8).toString() === 'ftyp' &&
-    /heic|heix|hevc|hevx|mif1/.test(original.subarray(8, 40).toString());
+    !/avif|avis/.test(brands) &&
+    /heic|heix|hevc|hevx|mif1/.test(brands);
   let input = original;
   if (isHeic)
     input = Buffer.from(
@@ -24,7 +33,15 @@ export async function processPhoto(file: File, memoryId: string) {
   ) {
     throw new Error('Formato no compatible. Usa JPEG, PNG, WebP, AVIF o HEIC.');
   }
-  const id = randomUUID();
+  const extension = isHeic
+    ? 'heic'
+    : metadata.format === 'heif'
+      ? 'avif'
+      : metadata.format === 'jpeg'
+        ? 'jpg'
+        : metadata.format!;
+  const filename = photoFilename(date, title, id, extension);
+  const keys = photoKeys(date, filename);
   // Sharp elimina EXIF (incluido GPS). Los originales se guardan sin modificar.
   const preview = await image
     .clone()
@@ -46,18 +63,25 @@ export async function processPhoto(file: File, memoryId: string) {
   const mime = isHeic
     ? 'image/heic'
     : `image/${metadata.format === 'heif' ? 'avif' : metadata.format}`;
+  const written: string[] = [];
   try {
-    await putFile(`${id}/original`, original, mime);
-    await putFile(`${id}/preview`, preview, 'image/jpeg');
-    await putFile(`${id}/thumb`, thumb, 'image/jpeg');
+    await putFile(keys.originalKey, original, mime);
+    written.push(keys.originalKey);
+    await putFile(keys.previewKey, preview, 'image/jpeg');
+    written.push(keys.previewKey);
+    await putFile(keys.thumbKey, thumb, 'image/jpeg');
+    written.push(keys.thumbKey);
   } catch (error) {
-    await deletePhotoFiles(id).catch(console.error);
+    await Promise.all(
+      written.map((key) => deleteFile(key).catch(console.error)),
+    );
     throw error;
   }
   return {
     id,
     memoryId,
-    filename: file.name.replace(/[\r\n]/g, '').slice(0, 200),
+    filename,
+    ...keys,
     mime,
     size: file.size,
     width: metadata.width,
