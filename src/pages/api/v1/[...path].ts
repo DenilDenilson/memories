@@ -14,6 +14,7 @@ import {
 import {
   allowAttempt,
   authenticate,
+  adminConfigured,
   digest,
   hashSecret,
   issueSession,
@@ -109,10 +110,10 @@ export const ALL: APIRoute = async (context) => {
           mode: z.enum(['admin', 'group']),
         })
         .parse(await json(request));
-      if (input.mode === 'admin' && !process.env.ADMIN_PASSWORD_HASH)
+      if (input.mode === 'admin' && !adminConfigured())
         fail(
           503,
-          'Configura ADMIN_PASSWORD_HASH para habilitar la administración.',
+          'Configura ADMIN_PASSWORD con tu contraseña o ADMIN_PASSWORD_HASH con un hash scrypt válido; después redespliega la aplicación.',
         );
       const identity = await authenticate(input.secret, input.mode);
       if (!identity) fail(401, 'La contraseña o el código no son correctos.');

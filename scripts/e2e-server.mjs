@@ -23,6 +23,8 @@ const server = spawn(
       TURSO_DATABASE_URL: pathToFileURL(join(dir, 'e2e.sqlite')).href,
       TURSO_AUTH_TOKEN: '',
       ADMIN_PASSWORD_HASH: hash,
+      ADMIN_PASSWORD:
+        process.env.E2E_TARGET === 'vercel' ? 'e2e-admin-password' : '',
       S3_BUCKET: '',
       COOKIE_SECURE: 'false',
       APP_ORIGIN: 'http://localhost:4322',

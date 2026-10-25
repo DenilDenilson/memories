@@ -25,7 +25,9 @@ cp .env.example .env
 node scripts/hash-password.mjs
 ```
 
-El último comando solicita una contraseña sin mostrarla y devuelve una línea `ADMIN_PASSWORD_HASH=...`. Pégala en `.env`; no guardes la contraseña en texto plano. Reinicia el servidor después de cambiar variables.
+Puedes definir tu contraseña directamente en la variable privada `ADMIN_PASSWORD` de `.env` o Vercel. No necesita un formato especial: al entrar en la web introduces exactamente esa contraseña. No uses prefijos `PUBLIC_` ni guardes `.env` en Git.
+
+Como alternativa, `node scripts/hash-password.mjs` solicita una contraseña sin mostrarla y devuelve `ADMIN_PASSWORD_HASH=scrypt:...`. En ese modo guardas el hash en la variable e introduces **la contraseña original**, no el hash, en la web. Deja `ADMIN_PASSWORD` vacío para usar el hash; si ambas variables están configuradas, tiene prioridad `ADMIN_PASSWORD`. Una contraseña escrita directamente en `ADMIN_PASSWORD_HASH` no es válida. Reinicia o redespliega después de cambiar variables.
 
 ```sh
 npm run dev
@@ -47,7 +49,7 @@ Los grupos no se heredan entre sí. Una publicación puede pertenecer a amigos y
 
 Las sesiones duran 30 días. Los tokens de API duran 90 días. Solo se almacenan hashes de los secretos. Cada petición a la API de imágenes comprueba permisos; con R2, devuelve una redirección firmada válida **60 segundos**, sin enlaces públicos permanentes. Las URLs ya emitidas pueden seguir funcionando durante esos 60 segundos tras una revocación. Las respuestas usan `private, no-store`. Las versiones de visualización eliminan EXIF/GPS; el original conserva sus metadatos. Una persona autorizada puede guardar las versiones de visualización que recibe en su navegador, aunque no tenga acceso al original.
 
-La contraseña no tiene recuperación por correo: para cambiarla, genera un nuevo hash y reinicia o redespliega. Para invalidar **todas las sesiones y tokens de este álbum**, ejecuta `DELETE FROM denil_sessions;` en tu base de datos. No elimina tablas o sesiones de otras aplicaciones.
+La contraseña no tiene recuperación por correo: para cambiarla, actualiza `ADMIN_PASSWORD` (o genera un nuevo hash si utilizas ese modo) y reinicia o redespliega. Para invalidar **todas las sesiones y tokens de este álbum**, ejecuta `DELETE FROM denil_sessions;` en tu base de datos. No elimina tablas o sesiones de otras aplicaciones.
 
 ## Almacenamiento
 

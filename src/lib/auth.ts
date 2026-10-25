@@ -19,6 +19,7 @@ export function hashSecret(value: string) {
   return `scrypt:${salt}:${scryptSync(value, salt, 64).toString('hex')}`;
 }
 export function verifySecret(value: string, stored: string) {
+  if (!isSecretHash(stored)) return false;
   const [algorithm, salt, hash] = stored.split(':');
   if (algorithm !== 'scrypt' || !salt || !/^[a-f0-9]{128}$/.test(hash || ''))
     return false;
@@ -26,6 +27,15 @@ export function verifySecret(value: string, stored: string) {
 }
 export const digest = (value: string) =>
   createHash('sha256').update(value).digest('hex');
+export function isSecretHash(value: string) {
+  return /^scrypt:[^:]+:[a-f0-9]{128}$/.test(value);
+}
+export function adminConfigured() {
+  return (
+    Boolean(process.env.ADMIN_PASSWORD) ||
+    isSecretHash(process.env.ADMIN_PASSWORD_HASH || '')
+  );
+}
 export async function issueSession(
   access: Access,
   kind: 'session' | 'token' = 'session',
@@ -72,6 +82,15 @@ export async function authenticate(
   mode: string,
 ): Promise<Access | null> {
   if (mode === 'admin') {
+    const password = process.env.ADMIN_PASSWORD;
+    if (password) {
+      // Comparar buffers de longitud fija sin exponer la contraseña al cliente.
+      const matches = timingSafeEqual(
+        createHash('sha256').update(secret).digest(),
+        createHash('sha256').update(password).digest(),
+      );
+      return matches ? { role: 'admin' } : null;
+    }
     return verifySecret(secret, process.env.ADMIN_PASSWORD_HASH || '')
       ? { role: 'admin' }
       : null;

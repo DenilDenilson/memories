@@ -1,4 +1,4 @@
-import { describe, it, expect, afterAll } from 'vitest';
+import { describe, it, expect, afterAll, afterEach, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import sharp from 'sharp';
@@ -18,6 +18,7 @@ import {
   issueSession,
   resolveAccess,
   authenticate,
+  adminConfigured,
   allowAttempt,
 } from '../src/lib/auth';
 import { getMemory, listMemories } from '../src/lib/memories';
@@ -39,6 +40,7 @@ await client.execute(
 await client.execute('PRAGMA user_version = 77');
 await ensureDatabase();
 afterAll(() => client.close());
+afterEach(() => vi.unstubAllEnvs());
 const friend = randomUUID();
 const family = randomUUID();
 const code = 'friends-code-123';
@@ -127,6 +129,33 @@ describe('base compartida y permisos', () => {
   });
 });
 describe('códigos y sesiones', () => {
+  it('acepta la contraseña directa exacta aunque quede un hash antiguo mal configurado', async () => {
+    vi.stubEnv('ADMIN_PASSWORD', 'a-private-test.password-123');
+    vi.stubEnv('ADMIN_PASSWORD_HASH', 'not-a-hash');
+    expect(adminConfigured()).toBe(true);
+    expect(await authenticate('a-private-test.password-123', 'admin')).toEqual({
+      role: 'admin',
+    });
+    expect(await authenticate('wrong', 'admin')).toBeNull();
+    expect(
+      await authenticate('a-private-test.password-123 ', 'admin'),
+    ).toBeNull();
+  });
+  it('mantiene el acceso con hash cuando no hay contraseña directa', async () => {
+    vi.stubEnv('ADMIN_PASSWORD', '');
+    vi.stubEnv('ADMIN_PASSWORD_HASH', hashSecret('hashed-test-password'));
+    expect(adminConfigured()).toBe(true);
+    expect(await authenticate('hashed-test-password', 'admin')).toEqual({
+      role: 'admin',
+    });
+    expect(await authenticate('wrong', 'admin')).toBeNull();
+  });
+  it('detecta una contraseña escrita por error en la variable de hash', async () => {
+    vi.stubEnv('ADMIN_PASSWORD', '');
+    vi.stubEnv('ADMIN_PASSWORD_HASH', 'not-a-hash');
+    expect(adminConfigured()).toBe(false);
+    expect(await authenticate('not-a-hash', 'admin')).toBeNull();
+  });
   it('almacena hashes con sal y rechaza valores incorrectos o hashes inválidos', () => {
     const hash = hashSecret('a-password');
     expect(hash).not.toContain('a-password');

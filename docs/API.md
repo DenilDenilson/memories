@@ -156,5 +156,5 @@ Todas las operaciones requieren administrador.
 - `409`: nombre o código de grupo duplicado.
 - `413`: petición demasiado grande.
 - `429`: más de 10 intentos de acceso en 15 minutos por dirección de conexión.
-- `503`: falta configurar la contraseña de administrador.
+- `503`: falta configurar la contraseña de administrador o `ADMIN_PASSWORD_HASH` no tiene un formato scrypt válido y no hay `ADMIN_PASSWORD` definido.
 - `500`: fallo interno o almacenamiento no disponible.

@@ -3,7 +3,7 @@
 ## Comprobaciones ejecutadas
 
 - `npm run verify`: sin errores de tipos, lint, formato ni build.
-- Vitest: **20 pruebas** unitarias/de integración aprobadas.
+- Vitest: **23 pruebas** unitarias/de integración aprobadas.
 - Playwright: **4 pruebas** sobre el build real de Node y **4 pruebas** sobre el artefacto serverless generado por el adaptador de Vercel, en Chromium de escritorio y emulación móvil de iPhone 13.
 - QA adicional usando el navegador MCP de Playwright a 1440 × 1000 y 390 × 844.
 
@@ -15,6 +15,7 @@ En este entorno se usó el Chromium del sistema con `PLAYWRIGHT_CHROMIUM_EXECUTA
 - Fechas inválidas y límites del intervalo de consulta.
 - Público, grupos independientes, audiencias combinadas y acceso total del administrador.
 - Hashes con sal, caducidad, separación entre cookies y tokens API, revocación y límite de intentos.
+- Acceso de administrador con contraseña directa o hash, precedencia explícita y detección de contraseñas escritas por error en la variable del hash. Los E2E Node usan el modo hash y los E2E del artefacto Vercel, contraseña directa.
 - Originales byte a byte, JPEG optimizado sin EXIF/GPS y miniaturas.
 - Conversión de un archivo HEIC real generado para las pruebas; rechazo de archivos falsos/vacíos.
 - Base compartida: preservación de `syt-sessions` y del `PRAGMA user_version` ajeno a la aplicación.

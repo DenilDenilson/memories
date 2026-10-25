@@ -60,24 +60,26 @@ CORS permite el PUT directo del navegador; **no hace público** el bucket. Las U
 
 ### Variables de producción
 
-| Variable               | Valor                                              |
-| ---------------------- | -------------------------------------------------- |
-| `TURSO_DATABASE_URL`   | URL de la base `personal`                          |
-| `TURSO_AUTH_TOKEN`     | Token de esa base                                  |
-| `S3_ENDPOINT`          | Endpoint S3 de R2                                  |
-| `S3_REGION`            | `auto`                                             |
-| `S3_BUCKET`            | Bucket privado elegido                             |
-| `S3_ACCESS_KEY_ID`     | Access Key ID del token R2                         |
-| `S3_SECRET_ACCESS_KEY` | Secret Access Key del token R2                     |
-| `ADMIN_PASSWORD_HASH`  | Hash generado con `node scripts/hash-password.mjs` |
-| `COOKIE_SECURE`        | `true`                                             |
-| `APP_ORIGIN`           | `https://tu-proyecto.vercel.app`, sin barra final  |
+| Variable               | Valor                                                         |
+| ---------------------- | ------------------------------------------------------------- |
+| `TURSO_DATABASE_URL`   | URL de la base `personal`                                     |
+| `TURSO_AUTH_TOKEN`     | Token de esa base                                             |
+| `S3_ENDPOINT`          | Endpoint S3 de R2                                             |
+| `S3_REGION`            | `auto`                                                        |
+| `S3_BUCKET`            | Bucket privado elegido                                        |
+| `S3_ACCESS_KEY_ID`     | Access Key ID del token R2                                    |
+| `S3_SECRET_ACCESS_KEY` | Secret Access Key del token R2                                |
+| `ADMIN_PASSWORD`       | Contraseña elegida por ti, como variable privada del servidor |
+| `COOKIE_SECURE`        | `true`                                                        |
+| `APP_ORIGIN`           | `https://tu-proyecto.vercel.app`, sin barra final             |
 
 Guarda estas variables en **Production**. Para Preview utiliza otra base/bucket de prueba y el origen correspondiente; no compartas inadvertidamente los datos de producción con todas las ramas. Si todavía no conoces el dominio, Vercel lo mostrará al crear el proyecto; configura `APP_ORIGIN` y CORS con ese dominio y redespliega.
 
 No se necesitan `DATA_DIR`, `HOST` ni `PORT` en Vercel. La aplicación exige Turso y un bucket R2 configurado en ese entorno. Las sesiones, los intentos de acceso y las autorizaciones de subida están en Turso, no en memoria o disco efímero de la función.
 
 ## 4. Comprobar el despliegue
+
+Para la contraseña puedes elegir uno de dos modos: `ADMIN_PASSWORD` contiene la contraseña que escribirás en la web; `ADMIN_PASSWORD_HASH` contiene exclusivamente un hash `scrypt:...` generado por el script. Si defines ambos, tiene prioridad `ADMIN_PASSWORD`. No pongas una contraseña sin procesar en la variable de hash. Al cambiar variables en Vercel, aplica el cambio a Production y realiza un nuevo despliegue. Usa una contraseña larga y mantenla solo en las variables privadas del servidor.
 
 1. Abrir el calendario público y `/acceso?modo=admin`.
 2. Entrar con la contraseña propia.
